@@ -5,7 +5,7 @@ from flask import Flask
 from threading import Thread
 
 # --- CẤU HÌNH ---
-BOT_TOKEN = 'TOKEN_BOT_CUA_BAN'
+BOT_TOKEN = '6556057870:AAFPx3CJpAcGt-MfKRoAo00SlAEQ26XSS-s'
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # --- PHẦN WEB SERVER ĐỂ GIỮ BOT LUÔN THỨC ---

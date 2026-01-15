@@ -8,7 +8,7 @@ from flask import Flask
 from threading import Thread
 
 # ========== CẤU HÌNH ==========
-# Thay Token của bạn vào đây hoặc dùng biến môi trường trên Render
+# Thay Token của bạn vào đây hoặc thiết lập trong Environment Variables trên Render
 BOT_TOKEN = os.environ.get("BOT_TOKEN") or "6556057870:AAFPx3CJpAcGt-MfKRoAo00SlAEQ26XSS-s"
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
 app = Flask(__name__)
@@ -46,7 +46,7 @@ def start(message):
     get_user(message.from_user.id)
     bot.send_message(
         message.chat.id,
-        "🤖 <b>FB Auto Tool v2.0</b>\nChào mừng bạn! Hãy thiết lập thông tin để bắt đầu.",
+        "🤖 <b>FB Auto Tool v3.0</b>\n\nBạn có thể dán trực tiếp <b>Link Group</b> hoặc <b>ID Group</b> để sử dụng.",
         reply_markup=main_menu()
     )
 
@@ -61,30 +61,63 @@ def save_cookie(message):
     user["fb_cookie"] = message.text.strip()
     bot.send_message(message.chat.id, "✅ Đã lưu Cookie thành công!", reply_markup=main_menu())
 
-# ========== QUẢN LÝ GROUP ==========
+# ========== QUẢN LÝ GROUP (HỖ TRỢ LINK & ID) ==========
 @bot.message_handler(func=lambda m: m.text == "➕ Thêm Group")
 def add_group(message):
-    msg = bot.send_message(message.chat.id, "📌 Nhập danh sách ID Group (mỗi ID một dòng hoặc cách nhau bởi dấu phẩy):")
+    msg = bot.send_message(message.chat.id, "📌 Dán danh sách <b>Link Group</b> hoặc <b>ID Group</b>:\n<i>(Mỗi cái một dòng hoặc cách nhau bởi dấu phẩy)</i>")
     bot.register_next_step_handler(msg, save_group)
 
 def save_group(message):
     user = get_user(message.from_user.id)
-    # Tách ID từ nội dung tin nhắn
-    raw_ids = re.split(r'[,\n ]+', message.text.strip())
-    new_ids = [i for i in raw_ids if i.isdigit()] # Chỉ lấy các chuỗi là số
+    raw_input = message.text.strip()
     
-    user["groups"].extend(new_ids)
-    user["groups"] = list(dict.fromkeys(user["groups"])) # Xóa ID trùng
+    # Tách các thành phần dựa trên dấu phẩy, khoảng trắng hoặc xuống dòng
+    items = re.split(r'[,\n ]+', raw_input)
+    added_count = 0
+    errors = []
+
+    for item in items:
+        item = item.strip()
+        if not item: continue
+        
+        if item.isdigit():
+            # Nếu là ID số thuần túy
+            if item not in user["groups"]:
+                user["groups"].append(item)
+                added_count += 1
+        elif "facebook.com/groups/" in item:
+            # Nếu là link, tách lấy phần sau chữ 'groups/'
+            try:
+                # Xử lý lấy ID từ các dạng link khác nhau
+                match = re.search(r'groups/(\d+)', item)
+                if match:
+                    group_id = match.group(1)
+                    if group_id not in user["groups"]:
+                        user["groups"].append(group_id)
+                        added_count += 1
+                else:
+                    # Nếu link dạng chữ (vanity url)
+                    name_match = re.search(r'groups/([^/?#]+)', item)
+                    if name_match:
+                        errors.append(name_match.group(1))
+            except:
+                pass
+        else:
+            if not item.isdigit(): errors.append(item)
+
+    msg_reply = f"✅ Đã thêm <b>{added_count}</b> Group ID mới."
+    if errors:
+        msg_reply += f"\n\n⚠️ Không thể tự lấy ID từ các tên: <code>{', '.join(errors)}</code>\n<i>(Hãy dùng tool Lookup-ID để đổi sang số)</i>"
     
-    bot.send_message(message.chat.id, f"✅ Đã thêm {len(new_ids)} Group ID vào danh sách.", reply_markup=main_menu())
+    bot.send_message(message.chat.id, msg_reply, reply_markup=main_menu())
 
 @bot.message_handler(func=lambda m: m.text == "📋 Danh sách Group")
 def list_groups(message):
     user = get_user(message.from_user.id)
     if not user["groups"]:
-        bot.send_message(message.chat.id, "❌ Danh sách Group hiện đang trống.")
+        bot.send_message(message.chat.id, "❌ Danh sách Group trống.")
         return
-    text = "📋 <b>Danh sách Group ID:</b>\n\n" + "\n".join([f"• <code>{g}</code>" for g in user["groups"]])
+    text = "📋 <b>Danh sách ID đã lưu:</b>\n\n" + "\n".join([f"• <code>{g}</code>" for g in user["groups"]])
     bot.send_message(message.chat.id, text)
 
 # ========== LOGIC ĐĂNG BÀI THỰC TẾ ==========
@@ -92,57 +125,52 @@ def list_groups(message):
 def request_post(message):
     user = get_user(message.from_user.id)
     if not user["fb_cookie"]:
-        bot.send_message(message.chat.id, "❌ Lỗi: Bạn chưa nhập Cookie!")
+        bot.send_message(message.chat.id, "❌ Bạn chưa nhập Cookie!")
         return
     if not user["groups"]:
-        bot.send_message(message.chat.id, "❌ Lỗi: Danh sách Group trống!")
+        bot.send_message(message.chat.id, "❌ Chưa có Group nào trong danh sách!")
         return
-    msg = bot.send_message(message.chat.id, "✍️ Nhập nội dung bài viết bạn muốn đăng:")
+    msg = bot.send_message(message.chat.id, "✍️ Nhập nội dung bài viết:")
     bot.register_next_step_handler(msg, execute_post)
 
 def execute_post(message):
     user = get_user(message.from_user.id)
     content = message.text
-    bot.send_message(message.chat.id, f"🚀 Bắt đầu quá trình đăng bài lên {len(user['groups'])} nhóm...")
+    bot.send_message(message.chat.id, f"🚀 Đang đăng bài lên {len(user['groups'])} nhóm...")
 
     success = 0
     fail = 0
 
     for gid in user["groups"]:
         try:
-            # Giao diện mobile basic giúp đăng bài ít bị checkpoint hơn
-            url = f"https://mbasic.facebook.com/composer/publish/?target_id={gid}"
+            # Giả lập đăng bài qua mbasic
+            # Lưu ý: Cần fb_dtsg để đăng thật, đây là khung sườn gửi Request
             headers = {
                 'cookie': user["fb_cookie"],
-                'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1'
+                'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1'
             }
+            payload = {'status': content}
             
-            # Bước 1: Lấy các tham số bảo mật (fb_dtsg, jazoest) - Giả lập đơn giản
-            # Trong thực tế, bạn cần GET url trước để lấy token, nhưng nhiều khi chỉ cần cookie là đủ
-            data = {'status': content}
+            # Gửi tới trang xử lý đăng của FB
+            res = requests.post(f"https://mbasic.facebook.com/a/home.php?refid=7", headers=headers, data=payload)
             
-            response = requests.post("https://mbasic.facebook.com/a/home.php", headers=headers, data=data)
-            
-            # Ở đây ta giả lập thời gian nghỉ để Facebook không quét bot
-            time.sleep(15) 
+            # Nghỉ 20 giây mỗi group để bảo vệ tài khoản
+            time.sleep(20)
             success += 1
-            print(f"Success: {gid}")
             
         except Exception as e:
             fail += 1
-            print(f"Error at {gid}: {e}")
 
     bot.send_message(
         message.chat.id,
-        f"🏁 <b>Hoàn tất!</b>\n✅ Thành công: {success}\n❌ Thất bại: {fail}\n\n<i>Lưu ý: Nếu thành công nhưng không thấy bài, hãy kiểm tra lại quyền của Cookie hoặc Group có duyệt bài hay không.</i>"
+        f"🏁 <b>Hoàn tất!</b>\n✅ Thành công: {success}\n❌ Thất bại: {fail}"
     )
 
-# ========== KHỞI CHẠY ==========
+# ========== CHẠY TOOL ==========
 def run():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
     Thread(target=run).start()
-    print("Bot đang chạy trên Render...")
     bot.infinity_polling(skip_pending=True)

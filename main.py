@@ -9,8 +9,8 @@ import string
 from flask import Flask
 from threading import Thread
 
-# ========== SIÊU CẤU HÌNH v10.0 (FIXED FOR RENDER) ==========
-# Khuyến khích đưa TOKEN vào Environment Variables trên Render
+# ========== CẤU HÌNH HỆ THỐNG ==========
+# LƯU Ý: Bạn nên vào BotFather lấy Token MỚI vì token cũ đã bị lộ
 BOT_TOKEN = "6556057870:AAFPx3CJpAcGt-MfKRoAo00SlAEQ26XSS-s"
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
 app = Flask(__name__)
@@ -24,12 +24,11 @@ def get_user(uid):
 
 @app.route('/')
 def home():
-    return "Ultra Stealth System v10.0 is Active! (Bot is Running)"
+    return "Ultra Stealth System v10.0 is Active!"
 
-# ========== CÔNG CỤ BYPASS NÂNG CAO ==========
+# ========== CÔNG CỤ BYPASS NĂNG CAO ==========
 
 def spintax_process(text):
-    """Xử lý định dạng {Chào|Hi|Hello} để tạo nội dung ngẫu nhiên"""
     while '{' in text:
         start = text.rfind('{')
         end = text.find('}', start)
@@ -47,7 +46,7 @@ def get_random_ua():
     ]
     return random.choice(ua_list)
 
-# ========== CORE ĐĂNG BÀI - STEALTH MODE ==========
+# ========== CORE ĐĂNG BÀI ==========
 
 def post_to_group_v10(cookie, group_id, content, proxy):
     session = requests.Session(impersonate="chrome110") 
@@ -57,7 +56,6 @@ def post_to_group_v10(cookie, group_id, content, proxy):
     ua = get_random_ua()
     headers = {
         'authority': 'mbasic.facebook.com',
-        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
         'cookie': cookie,
         'user-agent': ua,
         'referer': f'https://mbasic.facebook.com/groups/{group_id}'
@@ -65,21 +63,15 @@ def post_to_group_v10(cookie, group_id, content, proxy):
     session.headers.update(headers)
 
     try:
-        # BƯỚC 1: Giả lập xem nhóm
         res_view = session.get(f"https://mbasic.facebook.com/groups/{group_id}", timeout=20)
         if "checkpoint" in res_view.url: return False, "Checkpoint"
-        time.sleep(random.randint(5, 10)) # Giảm chút thời gian để test nhanh
-
-        # BƯỚC 2: Lấy Token bảo mật
+        
         fb_dtsg = re.search(r'name="fb_dtsg" value="([^"]+)"', res_view.text)
         jazoest = re.search(r'name="jazoest" value="([^"]+)"', res_view.text)
-        if not fb_dtsg: return False, "Cookie die hoặc bị chặn"
+        if not fb_dtsg: return False, "Cookie die"
 
-        # BƯỚC 3: Xử lý nội dung
-        final_content = spintax_process(content)
-        final_content += f"\n\n. . ." + "".join(random.choices(string.ascii_letters, k=3)) 
+        final_content = spintax_process(content) + f"\n\n. . ." + "".join(random.choices(string.ascii_letters, k=3)) 
 
-        # BƯỚC 4: Gửi bài
         post_data = {
             "fb_dtsg": fb_dtsg.group(1),
             "jazoest": jazoest.group(1),
@@ -87,16 +79,8 @@ def post_to_group_v10(cookie, group_id, content, proxy):
             "xhpc_targetid": group_id,
         }
         
-        res_post = session.post(
-            f"https://mbasic.facebook.com/a/home.php?refid=7", 
-            data=post_data, 
-            timeout=25
-        )
-
-        if res_post.status_code in (200, 302):
-            return True, "Thành công"
-        return False, f"Lỗi HTTP {res_post.status_code}"
-
+        res_post = session.post(f"https://mbasic.facebook.com/a/home.php?refid=7", data=post_data, timeout=25)
+        return (True, "Thành công") if res_post.status_code in (200, 302) else (False, f"Lỗi {res_post.status_code}")
     except Exception as e:
         return False, str(e)
 
@@ -109,77 +93,62 @@ def main_menu():
 
 @bot.message_handler(commands=['start'])
 def welcome(message):
-    bot.send_message(message.chat.id, "🤖 <b>Ultra Stealth System v10.0</b>\nHệ thống auto post bypass 2026 đã sẵn sàng!", reply_markup=main_menu())
+    bot.send_message(message.chat.id, "🤖 <b>Bot đã online!</b>", reply_markup=main_menu())
 
 @bot.message_handler(func=lambda m: m.text == "📝 Bắt đầu Đăng bài")
 def request_post(message):
     user = get_user(message.from_user.id)
     if not user["fb_cookie"] or not user["groups"]:
-        bot.send_message(message.chat.id, "❌ Lỗi: Bạn chưa nhập Cookie hoặc chưa có danh sách Group!")
+        bot.send_message(message.chat.id, "❌ Thiếu dữ liệu!")
         return
-    msg = bot.send_message(message.chat.id, "✍️ Nhập nội dung bài đăng (Hỗ trợ {A|B|C}):")
+    msg = bot.send_message(message.chat.id, "✍️ Nhập nội dung:")
     bot.register_next_step_handler(msg, trigger_auto_post)
 
 def trigger_auto_post(message):
-    # Chạy đăng bài trong Thread riêng để Bot không bị treo
-    content = message.text
-    t = Thread(target=start_auto_post, args=(message, content))
-    t.start()
+    Thread(target=start_auto_post, args=(message, message.text)).start()
 
 def start_auto_post(message, content):
     user = get_user(message.from_user.id)
-    if user["is_running"]:
-        bot.send_message(message.chat.id, "⚠️ Bot đang chạy một tiến trình rồi!")
-        return
-
+    if user["is_running"]: return
     user["is_running"] = True
-    bot.send_message(message.chat.id, "🛡️ Đang bắt đầu chiến dịch đăng bài ngầm...")
+    bot.send_message(message.chat.id, "🚀 Bắt đầu chạy...")
     
     success = 0
-    groups = list(user["groups"])
-    random.shuffle(groups)
-
-    for gid in groups:
+    for gid in user["groups"]:
         if not user["is_running"]: break
-        
         proxy = random.choice(user["proxies"]) if user["proxies"] else None
         ok, result = post_to_group_v10(user["fb_cookie"], gid, content, proxy)
+        bot.send_message(message.chat.id, f"{'✅' if ok else '❌'} Group {gid}: {result}")
+        if ok: success += 1
         
-        if ok:
-            success += 1
-            bot.send_message(message.chat.id, f"✅ Group {gid}: Thành công")
-        else:
-            bot.send_message(message.chat.id, f"❌ Group {gid}: {result}")
-            if result == "Checkpoint":
-                user["is_running"] = False
-                bot.send_message(message.chat.id, "🚨 Dừng Bot do Checkpoint!")
-                break
-
-        # Nghỉ giữa các bài (Chia nhỏ sleep để có thể dừng bot ngay lập tức)
-        delay = random.randint(2700, 5400) # 45-90 phút
+        # Nghỉ an toàn (Có thể bấm Dừng bot ngay)
+        delay = random.randint(2700, 5400)
         for _ in range(delay):
             if not user["is_running"]: break
             time.sleep(1)
 
     user["is_running"] = False
-    bot.send_message(message.chat.id, f"🏁 Hoàn tất. Đã đăng thành công {success} nhóm.")
+    bot.send_message(message.chat.id, f"🏁 Hoàn tất. Thành công: {success}")
 
 @bot.message_handler(func=lambda m: m.text == "🛑 Dừng bot")
 def stop_bot(message):
-    user = get_user(message.from_user.id)
-    user["is_running"] = False
-    bot.send_message(message.chat.id, "🛑 Đã nhận lệnh dừng. Bot sẽ dừng sau khi kết thúc lượt đăng này.")
+    get_user(message.from_user.id)["is_running"] = False
+    bot.send_message(message.chat.id, "🛑 Đang dừng...")
 
-# --- PHẦN KHỞI CHẠY (QUAN TRỌNG CHO RENDER) ---
+# ========== KHỞI CHẠY (FIXED FOR RENDER) ==========
 if __name__ == "__main__":
-    # 1. Tự động lấy Port từ Render
+    # 1. Chạy Web Server để Render không tắt
     port = int(os.environ.get("PORT", 10000))
-    
-    # 2. Chạy Flask trong luồng riêng
-    server_thread = Thread(target=lambda: app.run(host="0.0.0.0", port=port))
-    server_thread.daemon = True
-    server_thread.start()
-    
-    # 3. Chạy Telegram Bot
-    print(f"Bot đang chạy tại Port: {port}")
-    bot.infinity_polling(skip_pending=True)
+    server = Thread(target=lambda: app.run(host="0.0.0.0", port=port))
+    server.daemon = True
+    server.start()
+
+    # 2. Chạy Bot với cơ chế tự kết nối lại
+    print(f"Bot khởi động trên Port {port}")
+    while True:
+        try:
+            bot.remove_webhook() # Quan trọng để nhận tin nhắn
+            bot.polling(none_stop=True, interval=0, timeout=20)
+        except Exception as e:
+            print(f"Lỗi: {e}")
+            time.sleep(5)

@@ -1,0 +1,11 @@
+{
+  "name": "ff-bot-separate",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": { "start": "node index.js" },
+  "dependencies": {
+    "fca-unofficial": "latest",
+    "express": "^4.18.2",
+    "fs-extra": "^10.1.0"
+  }
+}

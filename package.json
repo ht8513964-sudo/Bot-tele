@@ -1,11 +1,14 @@
 {
-  "name": "ff-bot-separate",
+  "name": "bot-ff-tudong",
   "version": "1.0.0",
   "main": "index.js",
-  "scripts": { "start": "node index.js" },
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {
     "fca-unofficial": "latest",
-    "express": "^4.18.2",
-    "fs-extra": "^10.1.0"
+    "axios": "^1.6.0",
+    "fs-extra": "^11.1.0",
+    "express": "^4.18.2"
   }
 }

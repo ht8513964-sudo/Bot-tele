@@ -1,5 +1,6 @@
 {
-  "ADMIN_ID": "1000xxxxxxxxxxx",
   "PREFIX": "!",
-  "BOT_NAME": "Bot Free Fire"
+  "ADMIN_ID": "10000xxxx", 
+  "BOT_NAME": "FF_Auto_Bot",
+  "TIME_LIMIT": 900000
 }

@@ -3,65 +3,49 @@ const fs = require("fs");
 const express = require("express");
 const app = express();
 
-// --- PHẦN 1: GIỮ BOT ONLINE TRÊN RENDER ---
-app.get("/", (req, res) => res.send("Bot Free Fire đang hoạt động..."));
-const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`[SERVER] Đang chạy tại port: ${port}`));
+// Giữ bot online 24/7 trên Render
+app.get("/", (req, res) => res.send("Bot đang chạy..."));
+app.listen(process.env.PORT || 3000);
 
-// --- PHẦN 2: HÀM KHỞI CHẠY BOT ---
-function startBot() {
-    // Kiểm tra và đọc file appstate.json
-    let appState;
-    try {
-        appState = JSON.parse(fs.readFileSync('appstate.json', 'utf8'));
-    } catch (err) {
-        return console.error("[LỖI] Không thể đọc file appstate.json. Hãy kiểm tra lại file trên GitHub!");
-    }
+const pathAppState = "./appstate.json";
 
-    login({appState}, (err, api) => {
-        if (err) {
-            console.error("[LỖI ĐĂNG NHẬP] Có thể mã AppState đã hết hạn hoặc bị Facebook chặn.");
-            console.error("Chi tiết lỗi:", err);
-            return;
-        }
-
-        // Cấu hình bot
-        api.setOptions({
-            listenEvents: true, 
-            selfListen: false, 
-            forceLogin: true, 
-            online: true
-        });
-
-        // TỰ ĐỘNG CẬP NHẬT APPSTATE MỚI ĐỂ TRÁNH BỊ VĂNG
-        const newAppState = api.getAppState();
-        fs.writeFileSync('appstate.json', JSON.stringify(newAppState, null, 2));
-        console.log("[HỆ THỐNG] Đăng nhập thành công và đã cập nhật AppState mới!");
-
-        // --- PHẦN 3: XỬ LÝ TIN NHẮN ---
-        api.listenMqtt((err, event) => {
-            if (err) return console.error("[LỖI MQTT]:", err);
-
-            if (event.type === "message" && event.body) {
-                const body = event.body.trim();
-                const args = body.split(/\s+/);
-                const command = args.shift().toLowerCase();
-
-                // Lệnh kiểm tra bot
-                if (command === "!check") {
-                    return api.sendMessage("✅ Bot đang online và hoạt động tốt!", event.threadID);
-                }
-
-                // Lệnh đăng ký (Ví dụ: !reg TeamA 123456)
-                if (command === "!reg") {
-                    if (args.length < 2) return api.sendMessage("⚠️ Sai cú pháp! Ví dụ: !reg [Tên Đội] [ID]", event.threadID);
-                    return api.sendMessage(`📝 Đã ghi nhận đội: ${args[0]} - ID: ${args[1]}`, event.threadID);
-                }
-                
-                // Bạn có thể thêm các lệnh tính điểm Free Fire khác ở đây
-            }
-        });
-    });
+// Cơ chế kiểm tra file AppState giống Mirai
+if (!fs.existsSync(pathAppState) || fs.readFileSync(pathAppState).length == 0) {
+    console.error("LỖI: File appstate.json trống. Hãy dán mã JSON vào trước!");
+    process.exit(0);
 }
 
-startBot();
+const appState = JSON.parse(fs.readFileSync(pathAppState, "utf8"));
+
+const loginConfig = { appState };
+
+login(loginConfig, (err, api) => {
+    if (err) {
+        console.error("Đăng nhập thất bại. Có thể do AppState hết hạn hoặc Facebook chặn IP Render.");
+        return console.error(err);
+    }
+
+    // Tự động cập nhật AppState giống Mirai
+    fs.writeFileSync(pathAppState, JSON.stringify(api.getAppState(), null, 2));
+    console.log("ĐĂNG NHẬP THÀNH CÔNG! Đã cập nhật lại file appstate.json.");
+
+    api.setOptions({
+        listenEvents: true,
+        selfListen: false,
+        forceLogin: true,
+        online: true,
+        autoMarkDelivery: true // Đánh dấu đã chuyển tin nhắn
+    });
+
+    api.listenMqtt((err, event) => {
+        if (err) return console.error("Lỗi nhận tin nhắn:", err);
+        
+        // Phần xử lý lệnh (Prefix giống Mirai thường là "!")
+        if (event.type === "message" && event.body && event.body.startsWith("!")) {
+            const body = event.body.slice(1).trim(); // Bỏ dấu !
+            if (body === "check") {
+                api.sendMessage("✅ Bot Mirai-style đã online!", event.threadID);
+            }
+        }
+    });
+});

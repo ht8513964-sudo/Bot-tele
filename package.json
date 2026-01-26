@@ -1,6 +1,7 @@
 {
-  "name": "bot-ff-vnghia",
+  "name": "bot-messenger-ff",
   "version": "1.0.0",
+  "description": "Bot tu dong tinh diem Free Fire",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -8,7 +9,9 @@
   "dependencies": {
     "fca-unofficial": "latest",
     "express": "^4.18.2",
-    "axios": "^1.6.0",
     "fs-extra": "^11.1.0"
+  },
+  "engines": {
+    "node": ">=14.x"
   }
 }

@@ -1,83 +1,55 @@
 const login = require("fca-unofficial");
-const axios = require("axios");
-const fs = require("fs-extra");
+const fs = require("fs");
 const express = require("express");
-
 const app = express();
-app.get("/", (req, res) => res.send("Bot Free Fire đang online!"));
+
+// Tạo server để Render không bị tắt (Giữ bot online)
+app.get("/", (req, res) => res.send("Bot Free Fire đang chạy..."));
 app.listen(process.env.PORT || 3000);
 
-// Load cấu hình
-const config = fs.readJsonSync("./config.json");
-const PLAYER_FILE = "./players.json";
-const DATA_FILE = "./points.json";
-const rankTable = { 1: 12, 2: 9, 3: 8, 4: 7, 5: 6, 6: 5, 7: 4, 8: 3, 9: 2, 10: 1 };
+// Cấu hình đăng nhập
+const appState = JSON.parse(fs.readFileSync('appstate.json', 'utf8'));
 
-if (!fs.existsSync(PLAYER_FILE)) fs.writeJsonSync(PLAYER_FILE, {});
-if (!fs.existsSync(DATA_FILE)) fs.writeJsonSync(DATA_FILE, {});
+login({appState}, (err, api) => {
+    if(err) return console.error("Lỗi đăng nhập:", err);
 
-const appState = fs.readJsonSync("./appstate.json");
+    api.setOptions({listenEvents: true, selfListen: false});
 
-login({ appState }, (err, api) => {
-    if (err) return console.error("Lỗi AppState! Hãy kiểm tra lại.");
+    console.log("Bot đã đăng nhập thành công!");
 
-    api.listenMqtt(async (err, event) => {
-        if (!event || !event.body || !event.body.startsWith(config.PREFIX)) return;
-        
-        const args = event.body.slice(config.PREFIX.length).trim().split(/\s+/);
-        const cmd = args.shift().toLowerCase();
+    api.listenMqtt((err, event) => {
+        if (err) return console.error("Lỗi nhận tin nhắn:", err);
 
-        // 1. Đăng ký ID cầu thủ
-        if (cmd === "reg") {
-            const team = args[0], id = args[1];
-            if (!team || !id) return api.sendMessage(`⚠️ Cú pháp: ${config.PREFIX}reg [TênTeam] [ID]`, event.threadID);
-            let players = fs.readJsonSync(PLAYER_FILE);
-            players[id] = team;
-            fs.writeJsonSync(PLAYER_FILE, players);
-            api.sendMessage(`✅ Đã lưu: ${team} (ID: ${id})`, event.threadID);
-        }
-
-        // 2. Lệnh tính điểm tự động (Cơ chế vmnghia)
-        if (cmd === "room") {
-            const roomID = args[0];
-            if (!roomID) return api.sendMessage("⚠️ Nhập ID phòng!", event.threadID);
-            api.sendMessage(`⏳ Đang truy vấn lịch sử đấu cho phòng ${roomID}...`, event.threadID);
-
-            let players = fs.readJsonSync(PLAYER_FILE);
-            let results = [];
-            let now = Date.now();
-
-            for (const [id, team] of Object.entries(players)) {
-                try {
-                    const res = await axios.get(`https://congdong.ff.garena.vn/api/match/history?id=${id}`);
-                    const match = res.data.data[0];
-
-                    if (match && Math.abs(match.time_end - now) < config.TIME_LIMIT) {
-                        results.push({ team, rank: match.rank, kill: match.kill });
-                    }
-                } catch (e) { console.log(`Lỗi ID ${id}`); }
+        if (event.type === "message" && event.body) {
+            const message = event.body.trim();
+            
+            // Lệnh đăng ký: !reg [Tên đội] [ID]
+            if (message.startsWith("!reg")) {
+                const args = message.split(" ");
+                if (args.length < 3) {
+                    return api.sendMessage("Sai cú pháp! Ví dụ: !reg TeamA 12345678", event.threadID);
+                }
+                const teamName = args[1];
+                const playerID = args[2];
+                api.sendMessage(`✅ Đã đăng ký thành công cho đội ${teamName} (ID: ${playerID})`, event.threadID);
             }
 
-            if (results.length === 0) return api.sendMessage("❌ Không tìm thấy trận đấu mới hợp lệ!", event.threadID);
+            // Lệnh tính điểm: !diem [Thứ hạng] [Số Kill]
+            if (message.startsWith("!diem")) {
+                const args = message.split(" ");
+                const rank = parseInt(args[1]);
+                const kills = parseInt(args[2]);
+                
+                if (isNaN(rank) || isNaN(kills)) {
+                    return api.sendMessage("Nhập đúng: !diem [Hạng] [Kills]", event.threadID);
+                }
 
-            let bxh = `📊 PHÒNG: ${roomID}\n`;
-            let data = fs.readJsonSync(DATA_FILE);
-            results.forEach(res => {
-                let pts = (rankTable[res.rank] || 0) + res.kill;
-                data[res.team] = (data[res.team] || 0) + pts;
-                bxh += `🔹 ${res.team}: Top ${res.rank} (+${pts}đ)\n`;
-            });
-            fs.writeJsonSync(DATA_FILE, data);
-            api.sendMessage(bxh + "✅ Đã cộng điểm vào BXH!", event.threadID);
-        }
+                // Ví dụ cách tính: Top 1 = 12đ, mỗi kill = 1đ
+                const rankPoints = [0, 12, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0];
+                const total = (rankPoints[rank] || 0) + kills;
 
-        // 3. Xem BXH tổng
-        if (cmd === "bxh") {
-            let data = fs.readJsonSync(DATA_FILE);
-            let sorted = Object.entries(data).sort((a,b) => b[1] - a[1]);
-            let msg = "🏆 BXH TỔNG GIẢI ĐẤU 🏆\n";
-            sorted.forEach(([t, p], i) => msg += `${i+1}. ${t}: ${p}đ\n`);
-            api.sendMessage(msg || "Chưa có điểm.", event.threadID);
+                api.sendMessage(`📊 Kết quả: Hạng ${rank} (${rankPoints[rank] || 0}đ) + ${kills} kill (${kills}đ) = Tổng ${total} điểm.`, event.threadID);
+            }
         }
     });
 });
